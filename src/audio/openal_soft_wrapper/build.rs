@@ -87,6 +87,12 @@ fn main() {
         build.define("ALSOFT_NO_CONFIG_UTIL", "ON");
         build.define("ALSOFT_EXAMPLES", "OFF");
 
+        // Newer OpenAL Soft sources use C++11+ enum/alias syntax. Set the
+        // language standard explicitly because older CMake defaults can select
+        // a pre-C++11 mode on some Linux runners.
+        build.define("CMAKE_CXX_STANDARD", "17");
+        build.define("CMAKE_CXX_STANDARD_REQUIRED", "ON");
+
         if os.eq_ignore_ascii_case("linux") {
             // Make Linux release builds actually include normal desktop audio.
             // Without these, OpenAL Soft can silently build with only sndio/oss/null/wave,
