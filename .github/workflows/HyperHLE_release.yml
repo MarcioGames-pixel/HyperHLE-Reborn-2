@@ -177,6 +177,12 @@ jobs:
           cmakeVersion: "~3.29.0"
 
       - name: Build
+        # OpenAL Soft contains C++ enum declarations with fixed underlying types.
+        # CFLAGS is also used by the bundled C/ASM build scripts, so keep the
+        # C++17 standard in CXXFLAGS instead of accidentally passing GNU C17
+        # to the assembler.
+        env:
+          CXXFLAGS: -std=gnu++17
         run: cargo build --release
 
       - name: Create bundle
