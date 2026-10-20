@@ -178,6 +178,10 @@ jobs:
 
       - name: Build
         run: cargo build --release
+        env:
+          # Keep legacy SDL 2 C sources in C17 mode; GCC 15 defaults to C23,
+          # where `true` and `false` are keywords and break SDL_hidapi_steam.c.
+          CFLAGS: -std=gnu17
 
       - name: Create bundle
         run: cd dev-scripts && ./make-linux-bundle.sh ../target/release/touchHLE && mv touchHLE_linux_bundle/ ..
