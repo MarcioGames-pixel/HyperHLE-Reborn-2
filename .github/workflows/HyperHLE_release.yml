@@ -178,6 +178,10 @@ jobs:
 
       - name: Build
         run: cargo build --release
+        env:
+          # Keep legacy SDL 2 C sources in C17 mode; GCC 15 defaults to C23,
+          # where `true` and `false` are keywords and break SDL_hidapi_steam.c.
+          CFLAGS: -std=gnu17
 
       - name: Create bundle
         run: cd dev-scripts && ./make-linux-bundle.sh ../target/release/touchHLE && mv touchHLE_linux_bundle/ ..
@@ -197,6 +201,15 @@ jobs:
         submodules: recursive
         fetch-depth: 0
         fetch-tags: true
+
+    # Gradle 8.11.1 / Android Gradle Plugin 8.10.1 require a supported JVM.
+    # Ubuntu's newest runner image may default to Java 25, which causes
+    # "Unsupported class file major version 69" during Gradle script analysis.
+    - name: Set up Java 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '17'
 
     - name: Cache Rust build artifacts
       uses: actions/cache@main
@@ -272,8 +285,12 @@ jobs:
       run: curl -L -o android-ndk-r25c-linux.zip "https://dl.google.com/android/repository/android-ndk-r25c-linux.zip"  
 
     - if: ${{ steps.cache-android-ndk.outputs.cache-hit != 'true' }}  
-      name: Extract Android NDK  
-      run: 7z -oandroid-ndk -snld x android-ndk-r25c-linux.zip  
+      name: Extract Android NDK
+      # Info-ZIP handles the NDK archive's relative symlinks; 7-Zip rejects
+      # valid NDK links such as bin/clang++ -> clang as "Dangerous link".
+      run: |
+        mkdir -p android-ndk
+        unzip -q android-ndk-r25c-linux.zip -d android-ndk
 
     - name: Link Android NDK  
       run: ln -s $PWD'/android-ndk/android-ndk-r25c' $ANDROID_SDK_ROOT'/ndk/25.2.9519653'  
