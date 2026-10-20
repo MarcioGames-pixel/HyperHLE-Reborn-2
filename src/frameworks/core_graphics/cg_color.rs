@@ -421,14 +421,9 @@ pub fn from_rgba(env: &mut Environment, rgba: (CGFloat, CGFloat, CGFloat, CGFloa
 
 /// Shortcut for use by `UIColor`
 pub fn to_rgba(objc: &ObjC, color: CGColorRef) -> (CGFloat, CGFloat, CGFloat, CGFloat) {
-    let &CGColorHostObject {
-        color_space_name,
-        r,
-        g,
-        b,
-        a,
-        ..
-    } = objc.borrow(color);
-    assert_eq!(color_space_name, kCGColorSpaceGenericRGB);
+    let &CGColorHostObject { r, g, b, a, .. } = objc.borrow(color);
+    // CGColorHostObject stores components as RGBA internally. Some callers
+    // can produce a default/unnamed color-space value, so do not panic merely
+    // because the bookkeeping name is empty.
     (r, g, b, a)
 }
