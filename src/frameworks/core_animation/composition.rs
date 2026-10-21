@@ -928,6 +928,36 @@ unsafe fn composite_layer_recursive(
         if host_obj.contents != nil {
             let image = cg_image::borrow_image(&env.objc, host_obj.contents);
 
+            // Opt-in diagnostics for invisible UIImageView/CALayer contents.
+            // This is gated so normal builds and performance are unchanged.
+            if crate::env_flag_cached!("TOUCHHLE_TRACE_COMPOSITOR_IMAGES") {
+                let pixels = image.pixels();
+                let (width, height) = image.dimensions();
+                let alpha_nonzero = pixels.chunks_exact(4).filter(|px| px[3] != 0).count();
+                let alpha_opaque = pixels.chunks_exact(4).filter(|px| px[3] == 255).count();
+                let rgb_nonzero = pixels
+                    .chunks_exact(4)
+                    .filter(|px| px[0] != 0 || px[1] != 0 || px[2] != 0)
+                    .count();
+                log!(
+                    "COMPOSITOR_IMAGE layer={:?} image={:?} size={}x{} bytes={} expected_bytes={} alpha_nonzero={} alpha_opaque={} rgb_nonzero={} bounds={:?} layer_opacity={} cumulative_opacity={} hidden={} opaque={}",
+                    layer,
+                    host_obj.contents,
+                    width,
+                    height,
+                    pixels.len(),
+                    width as usize * height as usize * 4,
+                    alpha_nonzero,
+                    alpha_opaque,
+                    rgb_nonzero,
+                    host_obj.bounds,
+                    host_obj.opacity,
+                    opacity,
+                    host_obj.hidden,
+                    host_obj.opaque,
+                );
+            }
+
             // No special handling for opacity is needed here: the alpha channel
             // on an image is meaningful and won't be ignored.
             texture_size = Some(upload_rgba8_pixels(
