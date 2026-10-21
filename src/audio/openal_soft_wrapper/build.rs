@@ -81,13 +81,11 @@ fn main() {
 
         build.define("LIBTYPE", "STATIC");
 
-        // OpenAL Soft uses C++11+ fixed-underlying-type enums. Set the
-        // language standard on this CMake project only; exporting CXXFLAGS
-        // globally also affects unrelated bundled builds such as SDL.
+        // OpenAL Soft uses C++11+ fixed-underlying-type enums. Scope
+        // CXXFLAGS to this CMake build only; setting it in the workflow
+        // breaks SDL's C sources as well.
         if os.eq_ignore_ascii_case("linux") {
-            build.define("CMAKE_CXX_STANDARD", "17");
-            build.define("CMAKE_CXX_STANDARD_REQUIRED", "ON");
-            build.define("CMAKE_CXX_EXTENSIONS", "ON");
+            build.env("CXXFLAGS", "-std=gnu++17");
         }
 
         // Don't build extras, we don't need them and they can encounter issues
