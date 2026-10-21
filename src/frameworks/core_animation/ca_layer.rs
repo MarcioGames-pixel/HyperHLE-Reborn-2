@@ -631,6 +631,18 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setBounds:(CGRect)bounds {
     let host_object = env.objc.borrow_mut::<CALayerHostObject>(this);
     let old_bounds = std::mem::replace(&mut host_object.bounds, bounds);
+    if !bounds.size.width.is_finite()
+        || !bounds.size.height.is_finite()
+        || bounds.size.width.abs() < 0.01
+        || bounds.size.height.abs() < 0.01
+    {
+        log!(
+            "CALAYER_BAD_BOUNDS layer={:?} old_bounds={:?} new_bounds={:?}",
+            this,
+            old_bounds,
+            bounds,
+        );
+    }
     if host_object.use_implicit_animations && old_bounds != bounds {
         let old_bounds: id = msg_class![env; NSValue valueWithCGRect:old_bounds];
         let bounds: id = msg_class![env; NSValue valueWithCGRect:bounds];
@@ -750,6 +762,22 @@ pub const CLASSES: ClassExports = objc_classes! {
             height: snap_near_integer(transformed_size.height),
         },
     };
+    if !new_bounds.size.width.is_finite()
+        || !new_bounds.size.height.is_finite()
+        || new_bounds.size.width.abs() < 0.01
+        || new_bounds.size.height.abs() < 0.01
+    {
+        log!(
+            "CALAYER_BAD_FRAME layer={:?} requested_frame={:?} anchor={:?} affine_transform={:?} inverse_transform={:?} transformed_size={:?} computed_bounds={:?}",
+            this,
+            frame,
+            anchor_point,
+            affine_transform,
+            inverse_transform,
+            transformed_size,
+            new_bounds,
+        );
+    }
     () = msg![env; this setBounds:new_bounds];
 }
 
