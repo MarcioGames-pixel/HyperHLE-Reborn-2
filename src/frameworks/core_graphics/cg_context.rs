@@ -294,7 +294,7 @@ fn CGContextSetAlpha(env: &mut Environment, context: CGContextRef, alpha: CGFloa
 
 // MARK: - Line style
 
-fn CGContextSetLineWidth(env: &mut Environment, context: CGContextRef, width: CGFloat) {
+pub fn CGContextSetLineWidth(env: &mut Environment, context: CGContextRef, width: CGFloat) {
     if context.is_null() {
         return;
     }
@@ -727,9 +727,9 @@ fn CGContextDrawPath(env: &mut Environment, context: CGContextRef, mode: i32) {
         }
     }
 }
-fn CGContextFillPath(env: &mut Environment, context: CGContextRef) { CGContextDrawPath(env,context,0); }
+pub fn CGContextFillPath(env: &mut Environment, context: CGContextRef) { CGContextDrawPath(env,context,0); }
 fn CGContextEOFillPath(env: &mut Environment, context: CGContextRef) { CGContextDrawPath(env,context,1); }
-fn CGContextStrokePath(env: &mut Environment, context: CGContextRef) { CGContextDrawPath(env,context,2); }
+pub fn CGContextStrokePath(env: &mut Environment, context: CGContextRef) { CGContextDrawPath(env,context,2); }
 
 // MARK: - Antialiasing / quality hints
 
