@@ -20,9 +20,10 @@ use crate::frameworks::core_graphics::cg_bitmap_context::{
 use crate::frameworks::core_graphics::cg_color::{CGColorHostObject, CGColorRef};
 use crate::frameworks::core_graphics::cg_color_space::CGColorSpaceCreateDeviceRGB;
 use crate::frameworks::core_graphics::cg_context::{
-    CGContextClearRect, CGContextDrawImage, CGContextFillRect, CGContextRef, CGContextRelease,
-    CGContextRestoreGState, CGContextSaveGState, CGContextScaleCTM, CGContextSetRGBFillColor,
-    CGContextTranslateCTM,
+    CGContextAddPath, CGContextClearRect, CGContextDrawImage, CGContextFillPath,
+    CGContextFillRect, CGContextRef, CGContextRelease, CGContextRestoreGState,
+    CGContextSaveGState, CGContextScaleCTM, CGContextSetLineWidth, CGContextSetRGBFillColor,
+    CGContextSetRGBStrokeColor, CGContextStrokePath, CGContextTranslateCTM,
 };
 use crate::frameworks::core_graphics::cg_image::{
     kCGImageAlphaPremultipliedLast, kCGImageByteOrder32Big,
@@ -77,6 +78,12 @@ pub(crate) struct CALayerHostObject {
     pub(super) corner_radius: CGFloat,
     pub(super) border_width: CGFloat,
     pub(super) border_color: Option<CGColorHostObject>,
+    // CAShapeLayer vector drawing state. The path is retained independently
+    // from the app's reference and rasterized into the layer backing bitmap.
+    shape_path: id,
+    shape_fill_color: Option<CGColorHostObject>,
+    shape_stroke_color: Option<CGColorHostObject>,
+    shape_line_width: CGFloat,
     pub(super) needs_display: bool,
     pub(super) needs_display_on_bounds_change: bool,
     pub(super) contents: id,
@@ -409,6 +416,13 @@ pub const CLASSES: ClassExports = objc_classes! {
         corner_radius: 0.0,
         border_width: 0.0,
         border_color: None,
+        shape_path: nil,
+        shape_fill_color: Some(CGColorHostObject {
+            color_space_name: "",
+            r: 0.0, g: 0.0, b: 0.0, a: 1.0,
+        }),
+        shape_stroke_color: None,
+        shape_line_width: 1.0,
         needs_display: false,
         needs_display_on_bounds_change: false,
         contents: nil,
@@ -450,6 +464,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         superlayer,
         cg_context,
         mask,
+        shape_path,
         ref mut sublayers,
         ..
     } = env.objc.borrow_mut(this);
@@ -458,6 +473,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     if drawable_properties != nil { release(env, drawable_properties); }
     if contents != nil { release(env, contents); }
     if mask != nil { release(env, mask); }
+    if shape_path != nil { release(env, shape_path); }
     if let Some(cg_context) = cg_context { CGContextRelease(env, cg_context); }
 
     // On real iOS a layer being deallocated cannot have a superlayer,
@@ -864,13 +880,14 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setNeedsDisplayOnBoundsChange:(bool)value { env.objc.borrow_mut::<CALayerHostObject>(this).needs_display_on_bounds_change = value; }
 
 - (())displayIfNeeded {
-    let &mut CALayerHostObject {
-        ref mut needs_display,
-        delegate,
-        ..
-    } = env.objc.borrow_mut(this);
-    if !std::mem::take(needs_display) { return; }
-    if delegate == nil { return; }
+    let (needs_display, delegate, shape_path) = {
+        let host = env.objc.borrow_mut::<CALayerHostObject>(this);
+        (std::mem::take(&mut host.needs_display), host.delegate, host.shape_path)
+    };
+    if !needs_display { return; }
+    // CAShapeLayer draws its path itself and usually has no delegate.
+    // Ordinary CALayer display remains delegate-driven as before.
+    if delegate == nil && shape_path == nil { return; }
 
     let delegate_class = ObjC::read_isa(delegate, &env.mem);
     if env.objc.class_has_method_named(delegate_class, "displayLayer:") {
@@ -924,7 +941,27 @@ pub const CLASSES: ClassExports = objc_classes! {
     CGContextScaleCTM(env, cg_context, ui_scale as CGFloat, ui_scale as CGFloat);
     CGContextTranslateCTM(env, cg_context, -origin.x, -origin.y);
     CGContextClearRect(env, cg_context, CGRect { origin, size });
-    () = msg![env; delegate drawLayer:this inContext:cg_context];
+    if delegate != nil {
+        () = msg![env; delegate drawLayer:this inContext:cg_context];
+    } else {
+        let (path, fill, stroke, line_width) = {
+            let host = env.objc.borrow::<CALayerHostObject>(this);
+            (host.shape_path, host.shape_fill_color, host.shape_stroke_color, host.shape_line_width)
+        };
+        if path != nil {
+            if let Some(color) = fill {
+                CGContextSetRGBFillColor(env, cg_context, color.r, color.g, color.b, color.a);
+                CGContextAddPath(env, cg_context, path);
+                CGContextFillPath(env, cg_context);
+            }
+            if let Some(color) = stroke {
+                CGContextSetRGBStrokeColor(env, cg_context, color.r, color.g, color.b, color.a);
+                CGContextSetLineWidth(env, cg_context, line_width);
+                CGContextAddPath(env, cg_context, path);
+                CGContextStrokePath(env, cg_context);
+            }
+        }
+    }
     CGContextRestoreGState(env, cg_context);
 }
 
@@ -1136,6 +1173,59 @@ pub const CLASSES: ClassExports = objc_classes! {
     for anim in anonymous_animations {
         release(env, anim);
     }
+}
+
+@end
+
+@implementation CAShapeLayer: CALayer
+
+- (id)path { env.objc.borrow::<CALayerHostObject>(this).shape_path }
+- (())setPath:(id)new_path {
+    if new_path == this { return; }
+    retain(env, new_path);
+    let old_path = {
+        let host = env.objc.borrow_mut::<CALayerHostObject>(this);
+        host.needs_display = true;
+        host.gles_texture_is_up_to_date = false;
+        std::mem::replace(&mut host.shape_path, new_path)
+    };
+    release(env, old_path);
+}
+
+- (CGColorRef)fillColor {
+    if let Some(color) = env.objc.borrow::<CALayerHostObject>(this).shape_fill_color {
+        let class = env.objc.get_known_class("_touchHLE_CGColor", &mut env.mem);
+        autorelease(env, env.objc.alloc_object(class, Box::new(color), &mut env.mem))
+    } else { nil }
+}
+- (())setFillColor:(CGColorRef)new_color {
+    let color = if new_color == nil { None } else { Some(*env.objc.borrow::<CGColorHostObject>(new_color)) };
+    let host = env.objc.borrow_mut::<CALayerHostObject>(this);
+    host.shape_fill_color = color;
+    host.needs_display = true;
+    host.gles_texture_is_up_to_date = false;
+}
+
+- (CGColorRef)strokeColor {
+    if let Some(color) = env.objc.borrow::<CALayerHostObject>(this).shape_stroke_color {
+        let class = env.objc.get_known_class("_touchHLE_CGColor", &mut env.mem);
+        autorelease(env, env.objc.alloc_object(class, Box::new(color), &mut env.mem))
+    } else { nil }
+}
+- (())setStrokeColor:(CGColorRef)new_color {
+    let color = if new_color == nil { None } else { Some(*env.objc.borrow::<CGColorHostObject>(new_color)) };
+    let host = env.objc.borrow_mut::<CALayerHostObject>(this);
+    host.shape_stroke_color = color;
+    host.needs_display = true;
+    host.gles_texture_is_up_to_date = false;
+}
+
+- (CGFloat)lineWidth { env.objc.borrow::<CALayerHostObject>(this).shape_line_width }
+- (())setLineWidth:(CGFloat)value {
+    let host = env.objc.borrow_mut::<CALayerHostObject>(this);
+    host.shape_line_width = value.max(0.0);
+    host.needs_display = true;
+    host.gles_texture_is_up_to_date = false;
 }
 
 @end
