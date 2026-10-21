@@ -342,6 +342,44 @@ fn CGPathAddRect(
     elems.push(PathElement::Close);
 }
 
+/// Adds an ellipse to a mutable path. Core Graphics callers use this for
+/// circular and oval UI elements; approximate the ellipse with cubic curves.
+fn CGPathAddEllipseInRect(
+    env: &mut Environment,
+    path: CGMutablePathRef,
+    _transform: MutVoidPtr,
+    rect: CGRect,
+) {
+    let k: CGFloat = 0.5522848;
+    let cx = rect.origin.x + rect.size.width * 0.5;
+    let cy = rect.origin.y + rect.size.height * 0.5;
+    let rx = rect.size.width * 0.5;
+    let ry = rect.size.height * 0.5;
+    let elems = &mut env.objc.borrow_mut::<CGPathHostObject>(path).elements;
+    elems.push(PathElement::MoveTo(CGPoint { x: cx + rx, y: cy }));
+    elems.push(PathElement::CurveTo {
+        c1: CGPoint { x: cx + rx, y: cy + ry * k },
+        c2: CGPoint { x: cx + rx * k, y: cy + ry },
+        to: CGPoint { x: cx, y: cy + ry },
+    });
+    elems.push(PathElement::CurveTo {
+        c1: CGPoint { x: cx - rx * k, y: cy + ry },
+        c2: CGPoint { x: cx - rx, y: cy + ry * k },
+        to: CGPoint { x: cx - rx, y: cy },
+    });
+    elems.push(PathElement::CurveTo {
+        c1: CGPoint { x: cx - rx, y: cy - ry * k },
+        c2: CGPoint { x: cx - rx * k, y: cy - ry },
+        to: CGPoint { x: cx, y: cy - ry },
+    });
+    elems.push(PathElement::CurveTo {
+        c1: CGPoint { x: cx + rx * k, y: cy - ry },
+        c2: CGPoint { x: cx + rx, y: cy - ry * k },
+        to: CGPoint { x: cx + rx, y: cy },
+    });
+    elems.push(PathElement::Close);
+}
+
 /// `CGPathAddArcToPoint` — adds an arc with the given radius that is
 /// tangent to two line segments. The first segment runs from the
 /// path's current point to `(x1, y1)`; the second segment runs from
@@ -616,6 +654,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGPathAddCurveToPoint(_, _, _, _, _, _, _, _)),
     export_c_func!(CGPathCloseSubpath(_)),
     export_c_func!(CGPathAddRect(_, _, _)),
+    export_c_func!(CGPathAddEllipseInRect(_, _, _)),
     export_c_func!(CGPathAddArcToPoint(_, _, _, _, _, _, _)),
     export_c_func!(CGPathAddPath(_, _, _)),
     export_c_func!(CGPathIsEmpty(_)),
