@@ -928,9 +928,11 @@ unsafe fn composite_layer_recursive(
         if host_obj.contents != nil {
             let image = cg_image::borrow_image(&env.objc, host_obj.contents);
 
-            // Opt-in diagnostics for invisible UIImageView/CALayer contents.
-            // This is gated so normal builds and performance are unchanged.
-            if crate::env_flag_cached!("TOUCHHLE_TRACE_COMPOSITOR_IMAGES") {
+            // Emit a bounded number of image diagnostics so Android builds can
+            // collect evidence without requiring environment-variable setup.
+            use std::sync::atomic::{AtomicU32, Ordering};
+            static IMAGE_TRACE_COUNT: AtomicU32 = AtomicU32::new(0);
+            if IMAGE_TRACE_COUNT.fetch_add(1, Ordering::Relaxed) < 200 {
                 let pixels = image.pixels();
                 let (width, height) = image.dimensions();
                 let alpha_nonzero = pixels.chunks_exact(4).filter(|px| px[3] != 0).count();
