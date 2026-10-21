@@ -273,7 +273,36 @@ jobs:
 
     - if: ${{ steps.cache-android-ndk.outputs.cache-hit != 'true' }}  
       name: Extract Android NDK  
-      run: 7z -oandroid-ndk -snld x android-ndk-r25c-linux.zip  
+      run: |
+        python3 - <<'PY'
+        import os, stat, zipfile
+        archive = "android-ndk-r25c-linux.zip"
+        destination = "android-ndk"
+        os.makedirs(destination, exist_ok=True)
+        with zipfile.ZipFile(archive) as zf:
+            entries = zf.infolist()
+            # Extract ordinary files first, so symlinks cannot redirect writes.
+            for item in entries:
+                mode = item.external_attr >> 16
+                if stat.S_ISLNK(mode) or item.is_dir():
+                    continue
+                target = os.path.join(destination, item.filename)
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                with zf.open(item) as src, open(target, "wb") as dst:
+                    dst.write(src.read())
+                os.chmod(target, mode & 0o777 or 0o644)
+            # Recreate symlinks as links, without following existing links.
+            for item in entries:
+                mode = item.external_attr >> 16
+                if not stat.S_ISLNK(mode):
+                    continue
+                target = os.path.join(destination, item.filename)
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                link_target = zf.read(item).decode("utf-8")
+                if os.path.lexists(target):
+                    os.unlink(target)
+                os.symlink(link_target, target)
+        PY  
 
     - name: Link Android NDK  
       run: ln -s $PWD'/android-ndk/android-ndk-r25c' $ANDROID_SDK_ROOT'/ndk/25.2.9519653'  
