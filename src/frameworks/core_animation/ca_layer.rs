@@ -1195,7 +1195,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (CGColorRef)fillColor {
     if let Some(color) = env.objc.borrow::<CALayerHostObject>(this).shape_fill_color {
         let class = env.objc.get_known_class("_touchHLE_CGColor", &mut env.mem);
-        autorelease(env, env.objc.alloc_object(class, Box::new(color), &mut env.mem))
+        let obj = env.objc.alloc_object(class, Box::new(color), &mut env.mem);
+        autorelease(env, obj)
     } else { nil }
 }
 - (())setFillColor:(CGColorRef)new_color {
@@ -1209,7 +1210,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (CGColorRef)strokeColor {
     if let Some(color) = env.objc.borrow::<CALayerHostObject>(this).shape_stroke_color {
         let class = env.objc.get_known_class("_touchHLE_CGColor", &mut env.mem);
-        autorelease(env, env.objc.alloc_object(class, Box::new(color), &mut env.mem))
+        let obj = env.objc.alloc_object(class, Box::new(color), &mut env.mem);
+        autorelease(env, obj)
     } else { nil }
 }
 - (())setStrokeColor:(CGColorRef)new_color {
