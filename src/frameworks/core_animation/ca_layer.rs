@@ -727,11 +727,17 @@ pub const CLASSES: ClassExports = objc_classes! {
     })
 }
 - (())setFrame:(CGRect)frame {
-    let CALayerHostObject { anchor_point, affine_transform, .. } = env.objc.borrow_mut(this);
+    // Copy the transform inputs out of the object borrow before sending
+    // Objective-C messages below; keeping the borrow alive across `msg!`
+    // causes E0499/E0502 during Android builds.
+    let (anchor_point, affine_transform) = {
+        let host_obj = env.objc.borrow(this);
+        (host_obj.anchor_point, host_obj.affine_transform)
+    };
     let inverse_transform = CGAffineTransform::make_translation(
         -frame.size.width * anchor_point.x,
         -frame.size.height * anchor_point.y,
-    ).concat(*affine_transform).invert();
+    ).concat(affine_transform).invert();
     let transformed_size = inverse_transform.apply_to_rect(CGRect {
         origin: CGPoint { x: 0.0, y: 0.0 },
         size: frame.size
