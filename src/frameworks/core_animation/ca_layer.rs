@@ -731,7 +731,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     // Objective-C messages below; keeping the borrow alive across `msg!`
     // causes E0499/E0502 during Android builds.
     let (anchor_point, affine_transform) = {
-        let host_obj = env.objc.borrow(this);
+        let host_obj = env.objc.borrow::<CALayerHostObject>(this);
         (host_obj.anchor_point, host_obj.affine_transform)
     };
     let inverse_transform = CGAffineTransform::make_translation(
