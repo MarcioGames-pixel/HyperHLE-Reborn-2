@@ -200,13 +200,44 @@ impl State {
                     let from_value = id_as_option(from_value).map(|obj| msg![env; obj CGRectValue]);
                     let to_value = id_as_option(to_value).map(|obj| msg![env; obj CGRectValue]);
                     let by_value = id_as_option(by_value).map(|obj| msg![env; obj CGRectValue]);
+                    let original_bounds = presentation.bounds;
                     let (from_value, by_value) = get_from_and_by_values(
-                        Some(presentation.bounds),
+                        Some(original_bounds),
                         from_value,
                         to_value,
                         by_value,
                     );
-                    presentation.bounds = from_value + by_value * interpolation_amount;
+                    let result_bounds = from_value + by_value * interpolation_amount;
+                    let is_suspicious = [
+                        original_bounds.size.width,
+                        original_bounds.size.height,
+                        from_value.size.width,
+                        from_value.size.height,
+                        by_value.size.width,
+                        by_value.size.height,
+                        result_bounds.size.width,
+                        result_bounds.size.height,
+                    ]
+                    .iter()
+                    .any(|value| !value.is_finite() || value.abs() < 0.01);
+
+                    if is_suspicious {
+                        log!(
+                            "CALAYER_ANIMATION_BAD_BOUNDS layer={:?} animation={:?} key={:?} key_path={} original={:?} from={:?} to={:?} by={:?} interpolation={} result={:?}",
+                            layer,
+                            animation,
+                            key,
+                            key_path,
+                            original_bounds,
+                            from_value,
+                            to_value,
+                            by_value,
+                            interpolation_amount,
+                            result_bounds,
+                        );
+                    }
+
+                    presentation.bounds = result_bounds;
                 }
                 "cornerRadius" => {
                     let from_value = id_as_option(from_value).map(|obj| msg![env; obj floatValue]);
